@@ -47,6 +47,14 @@ namespace PromptlyBot
 
             return this._activeTopic;
         }
+
+        public ITopic SetActiveTopic(ITopic newTopic)
+        {
+            this._activeTopic = newTopic;
+
+            return this._activeTopic;
+        }
+
         public ITopic ActiveTopic
         {
             get

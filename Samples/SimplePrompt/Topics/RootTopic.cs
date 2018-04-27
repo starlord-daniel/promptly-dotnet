@@ -14,14 +14,17 @@ namespace SimplePrompt.Topics
 
     public class RootTopic : TopicsRoot<BotConversationState, RootTopicState>
     {
+        private const string TEST_TOPIC = "testTopic";
+        private const string INFO_TOPIC = "infoTopic";
+        private static ITopic interruptedTopic;
+
         public RootTopic(IBotContext context) : base(context)
         {
-            this.SubTopics.Add("namePrompt", (object[] args) =>
+            this.SubTopics.Add(TEST_TOPIC, (object[] args) =>
             {
-                var namePrompt = new TextPrompt();
+                var testTopic = new TestTopic();
 
-                namePrompt.Set
-                    .OnPrompt("What is your name?")
+                testTopic.Set
                     .OnSuccess((ctx, value) =>
                     {
                         this.ClearActiveTopic();
@@ -31,25 +34,24 @@ namespace SimplePrompt.Topics
                         this.OnReceiveActivity(ctx);
                     });
 
-                return namePrompt;
+                return testTopic;
             });
 
-            this.SubTopics.Add("agePrompt", (object[] args) =>
+            this.SubTopics.Add(INFO_TOPIC, (object[] args) =>
             {
-                var agePrompt = new IntPrompt();
+                var infoTopic = new InfoTopic();
 
-                agePrompt.Set
-                    .OnPrompt("How old are you?")
+                infoTopic.Set
                     .OnSuccess((ctx, value) =>
                     {
                         this.ClearActiveTopic();
+                        interruptedTopic = null;
 
-                        this.State.Age = value;
-
-                        this.OnReceiveActivity(context);
+                        this.State.Name = value;
+                        this.OnReceiveActivity(ctx);
                     });
 
-                return agePrompt;
+                return infoTopic;
             });
         }
 
@@ -57,6 +59,34 @@ namespace SimplePrompt.Topics
         {
             if (context.Request.Type == ActivityTypes.Message)
             {
+                var message = context.Request.AsMessageActivity();
+
+                // If the user wants to change the topic of conversation...
+                if (message.Text.ToLowerInvariant() == "test")
+                {
+                    // Set the active topic and let the active topic handle this turn.
+                    this.SetActiveTopic(TEST_TOPIC)
+                            .OnReceiveActivity(context);
+                    return Task.CompletedTask;
+                }
+
+                if (message.Text.ToLowerInvariant() == "topic")
+                {
+                    this.SetActiveTopic(INFO_TOPIC)
+                        .OnReceiveActivity(context);
+                    return Task.CompletedTask;
+                }
+
+                if (message.Text == "interrupt")
+                {
+                    interruptedTopic = ActiveTopic;
+
+                    this.SetActiveTopic(TEST_TOPIC)
+                        .OnReceiveActivity(context);
+
+                    return Task.CompletedTask;
+                }
+
                 // Check to see if there is an active topic.
                 if (this.HasActiveTopic)
                 {
@@ -65,23 +95,16 @@ namespace SimplePrompt.Topics
                     return Task.CompletedTask;
                 }
 
-                // If you don't have the state you need, prompt for it
-                if (this.State.Name == null)
+                if(interruptedTopic != null)
                 {
-                    this.SetActiveTopic("namePrompt")
+                    this.SetActiveTopic(interruptedTopic)
                         .OnReceiveActivity(context);
-                    return Task.CompletedTask;
-                }
 
-                if (this.State.Age == null)
-                {
-                    this.SetActiveTopic("agePrompt")
-                        .OnReceiveActivity(context);
                     return Task.CompletedTask;
                 }
 
                 // Now that you have the state you need (age and name), use it!
-                context.SendActivity($"Hello { this.State.Name }! You are { this.State.Age } years old.");
+                context.SendActivity($"Please pick an option: test or topic");
                 return Task.CompletedTask;
             }
 
